@@ -1,0 +1,217 @@
+{
+  "Comment": "A Stepfunction to run data pipeline every 5 Min to load hourly data",
+  "StartAt": "nowprocessingCatch",
+  "States": {
+    "Job Failed": {
+      "Type": "Fail"
+    },
+    "queueFilesCleanup": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Job Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "InputPath": "$.Arguments",
+      "Next": "endStatus",
+      "OutputPath": "$",
+      "Parameters": {
+        "parameter_store_prefix": "{TO BE REPLACED:Prefix for Parameters}",
+        "process_status": 1,
+        "timestamp.$": "$.--date_time"
+      },
+      "Resource": "{TO BE REPLACED:ARN FOR nowprocessing-flg LAMBDA FUNCTION}",
+      "ResultPath": "$.queueFilesCleanup",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "endStatus": {
+      "End": true,
+      "ResultPath": "$",
+      "Type": "Pass"
+    },
+    "data_ingestion_into_db": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Job Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "InputPath": "$.ResultnowprocessingCreate",
+      "Next": "queueFilesCleanup",
+      "OutputPath": "$.ResultRcar_data_ingestion_into_db",
+      "Parameters": {
+        "Arguments": {
+          "--date_time.$": "$.timestamp",
+          "--parameter_store_prefix": "TO BE REPLACED:Prefix for Parameters"
+        },
+        "JobName": "{TO BE REPLACED:GLUE JOB NAME}"
+      },
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "ResultPath": "$.ResultRcar_data_ingestion_into_db",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "nowprocessingCatch": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Job Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "InputPath": "$",
+      "Next": "nowprocessingCheck",
+      "OutputPath": "$",
+      "Parameters": {
+        "parameter_store_prefix": "TO BE REPLACED:Prefix for Parameters"
+      },
+      "Resource": "{TO BE REPLACED:ARN FOR nowprocessing-check LAMBDA FUNCTION}",
+      "ResultPath": "$.ResultnowprocessingCatch",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "nowprocessingCheck": {
+      "Choices": [
+        {
+          "Next": "queueCatch",
+          "NumericEquals": 0,
+          "Variable": "$.ResultnowprocessingCatch.process_status"
+        },
+        {
+          "Next": "endStatus",
+          "NumericEquals": 9,
+          "Variable": "$.ResultnowprocessingCatch.process_status"
+        }
+      ],
+      "Type": "Choice"
+    },
+    "nowprocessingCreate": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Job Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "InputPath": "$",
+      "Next": "isParallelCheck",
+      "OutputPath": "$",
+      "Parameters": {
+        "parameter_store_prefix": "TO BE REPLACED:Prefix for Parameters",
+        "process_status.$": "$.ResultqueueCatch.process_status",
+        "timestamp.$": "$.ResultqueueCatch.timestamp"
+      },
+      "Resource": "{TO BE REPLACED:ARN FOR nowprocessing-flg LAMBDA FUNCTION}",
+      "ResultPath": "$.ResultnowprocessingCreate",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "isParallelCheck": {
+      "Choices": [
+        {
+          "Next": "data_ingestion_into_db",
+          "NumericEquals": 0,
+          "Variable": "$.ResultnowprocessingCreate.is_parallel"
+        },
+        {
+          "Next": "endStatus",
+          "NumericEquals": 9,
+          "Variable": "$.ResultnowprocessingCreate.is_parallel"
+        }
+      ],
+      "Type": "Choice"
+    },
+    "queueCatch": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Job Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "InputPath": "$",
+      "Next": "queueCheck",
+      "OutputPath": "$",
+      "Parameters": {
+        "parameter_store_prefix": "TO BE REPLACED:Prefix for Parameters"
+      },
+      "Resource": "{TO BE REPLACED:ARN FOR etl-queue-check LAMBDA FUNCTION}",
+      "ResultPath": "$.ResultqueueCatch",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "queueCheck": {
+      "Choices": [
+        {
+          "Next": "nowprocessingCreate",
+          "NumericEquals": 0,
+          "Variable": "$.ResultqueueCatch.process_status"
+        },
+        {
+          "Next": "endStatus",
+          "NumericEquals": 9,
+          "Variable": "$.ResultqueueCatch.process_status"
+        }
+      ],
+      "Type": "Choice"
+    }
+  }
+}
